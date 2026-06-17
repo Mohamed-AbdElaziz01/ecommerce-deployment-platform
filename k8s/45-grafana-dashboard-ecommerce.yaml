@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-ecommerce
+  namespace: ecommerce
+data:
+  ecommerce-overview.json: |
+    {
+      "title": "E-Commerce Platform Overview",
+      "uid": "ecommerce-overview",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "10s",
+      "time": { "from": "now-30m", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "HTTP Request Rate (per service)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (app) (rate(web_service_http_requests_total[1m]))",
+              "legendFormat": "web-service"
+            },
+            {
+              "expr": "sum by (app) (rate(payment_service_http_requests_total[1m]))",
+              "legendFormat": "payment-service"
+            },
+            {
+              "expr": "sum by (app) (rate(search_service_http_requests_total[1m]))",
+              "legendFormat": "search-service"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "P95 Request Latency (web-service)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(web_service_http_request_duration_seconds_bucket[5m])) by (le, route))",
+              "legendFormat": "{{route}}"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "title": "Payment Outcomes",
+          "type": "piechart",
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (status) (payment_service_payments_total)",
+              "legendFormat": "{{status}}"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "title": "Pod CPU Usage (cores)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"ecommerce\"}[2m]))",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "title": "Pod Memory Usage (bytes)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"ecommerce\"})",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "HTTP Error Rate (5xx)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(web_service_http_requests_total{status_code=~\"5..\"}[5m]))",
+              "legendFormat": "web-service 5xx"
+            },
+            {
+              "expr": "sum(rate(payment_service_http_requests_total{status_code=~\"5..\"}[5m]))",
+              "legendFormat": "payment-service 5xx"
+            },
+            {
+              "expr": "sum(rate(search_service_http_requests_total{status_code=~\"5..\"}[5m]))",
+              "legendFormat": "search-service 5xx"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "Replica Count per Deployment",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "targets": [
+            {
+              "expr": "kube_deployment_status_replicas{namespace=\"ecommerce\"}",
+              "legendFormat": "{{deployment}}"
+            }
+          ]
+        }
+      ]
+    }

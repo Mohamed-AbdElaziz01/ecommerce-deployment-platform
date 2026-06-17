@@ -1,0 +1,17 @@
+# Copy this file to terraform.tfvars and fill in your own values.
+# terraform.tfvars is gitignored - never commit real values, especially
+# if ssh_allowed_cidr or other fields contain sensitive info.
+
+aws_region    = "us-east-1"
+instance_type = "t3.medium"
+
+# Name of an EC2 key pair you've already created in the AWS console
+# (EC2 > Key Pairs > Create key pair). Download the .pem file and keep it safe.
+ssh_key_name = "ecommerce-key"
+
+# Restrict SSH/Grafana/Prometheus/Jenkins access to your own IP for security.
+# Find your IP at https://whatismyipaddress.com/ and use format "x.x.x.x/32"
+ssh_allowed_cidr = "0.0.0.0/0"
+
+data_volume_size_gb = 20
+app_port             = 8080

@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment files (never commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+
+# Docker
+*.tar
+
+# IDE
+.vscode/
+.idea/
+
+# Kubernetes generated/temp files
+k8s/metrics-patch.yaml

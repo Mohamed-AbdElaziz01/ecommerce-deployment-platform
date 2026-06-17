@@ -1,0 +1,53 @@
+---
+- name: Install Git
+  apt:
+    name: git
+    state: present
+    update_cache: yes
+
+- name: Clone or update the e-commerce platform repository
+  git:
+    repo: "{{ repo_url }}"
+    dest: "{{ app_dir }}"
+    version: "{{ repo_branch }}"
+    force: yes
+  register: repo_clone
+
+- name: Ensure .env files exist for each service (copy from .env.example if missing)
+  copy:
+    src: "{{ app_dir }}/{{ item }}/.env.example"
+    dest: "{{ app_dir }}/{{ item }}/.env"
+    remote_src: yes
+    force: no
+  loop:
+    - web-service
+    - payment-service
+    - search-service
+
+- name: Generate a strong JWT secret for web-service (if not already set)
+  lineinfile:
+    path: "{{ app_dir }}/web-service/.env"
+    regexp: '^JWT_SECRET='
+    line: "JWT_SECRET={{ lookup('password', '/dev/null length=48 chars=ascii_letters,digits') }}"
+  when: repo_clone.changed
+
+- name: Pull latest images and (re)start the platform with Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_dir }}"
+    pull: always
+    state: present
+  register: compose_result
+
+- name: Show Docker Compose deployment result
+  debug:
+    msg: "Deployed services: {{ compose_result.services.keys() | list }}"
+  when: compose_result.services is defined
+
+- name: Wait for web-service health check to pass
+  uri:
+    url: "http://localhost:8080/api/products"
+    status_code: 200
+  register: health_check
+  retries: 10
+  delay: 6
+  until: health_check.status == 200

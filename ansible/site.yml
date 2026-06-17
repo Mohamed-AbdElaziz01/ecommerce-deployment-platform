@@ -1,0 +1,43 @@
+---
+# Provisions a fresh Ubuntu server for the e-commerce platform:
+#   1. Installs Docker + Docker Compose
+#   2. Installs kubectl (and optionally k3s for a local Kubernetes cluster)
+#   3. Clones the repo and deploys the platform via Docker Compose
+#
+# Usage:
+#   ansible-playbook -i inventory.ini site.yml
+#
+# Target specific roles only:
+#   ansible-playbook -i inventory.ini site.yml --tags docker
+#   ansible-playbook -i inventory.ini site.yml --tags deploy
+
+- name: Provision and deploy the e-commerce platform
+  hosts: ecommerce_servers
+  become: yes
+
+  pre_tasks:
+    - name: Wait for SSH to be ready
+      wait_for_connection:
+        timeout: 120
+
+    - name: Gather facts
+      setup:
+
+  roles:
+    - role: docker
+      tags: [docker, setup]
+
+    - role: kubectl
+      tags: [kubectl, kubernetes, setup]
+
+    - role: app-deploy
+      tags: [deploy, app]
+
+  post_tasks:
+    - name: Print access information
+      debug:
+        msg:
+          - "Platform deployed successfully."
+          - "Web/API via Nginx:    http://{{ ansible_host }}:8080/api/products"
+          - "Search:               http://{{ ansible_host }}:8080/api/search/products?q=test"
+          - "Grafana (if exposed): http://{{ ansible_host }}:3000  (admin/admin - change this!)"

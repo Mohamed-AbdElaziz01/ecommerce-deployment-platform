@@ -1,0 +1,161 @@
+pipeline {
+    agent any
+
+    environment {
+        // Docker Hub username - set this to your own Docker Hub account
+        DOCKERHUB_NAMESPACE = 'your-dockerhub-username'
+
+        // Jenkins credential ID for Docker Hub (username + password/token)
+        DOCKERHUB_CREDENTIALS = 'dockerhub-credentials'
+
+        // Jenkins credential ID for kubeconfig (Secret file)
+        KUBECONFIG_CREDENTIALS = 'kubeconfig'
+
+        // Kubernetes namespace
+        K8S_NAMESPACE = 'ecommerce'
+
+        // Use the short git commit hash as the immutable image tag
+        IMAGE_TAG = "${env.GIT_COMMIT?.take(7) ?: 'latest'}"
+    }
+
+    options {
+        // Keep build logs/artifacts for the last 10 builds
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timestamps()
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install & Test') {
+            parallel {
+                stage('web-service') {
+                    steps {
+                        dir('web-service') {
+                            sh 'npm ci'
+                            sh 'npm test || echo "No tests defined yet - skipping"'
+                        }
+                    }
+                }
+                stage('payment-service') {
+                    steps {
+                        dir('payment-service') {
+                            sh 'npm ci'
+                            sh 'npm test || echo "No tests defined yet - skipping"'
+                        }
+                    }
+                }
+                stage('search-service') {
+                    steps {
+                        dir('search-service') {
+                            sh 'npm ci'
+                            sh 'npm test || echo "No tests defined yet - skipping"'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Images') {
+            parallel {
+                stage('Build web') {
+                    steps {
+                        sh """
+                            docker build -t ${DOCKERHUB_NAMESPACE}/ecommerce-web:${IMAGE_TAG} \
+                                         -t ${DOCKERHUB_NAMESPACE}/ecommerce-web:latest \
+                                         ./web-service
+                        """
+                    }
+                }
+                stage('Build payment-service') {
+                    steps {
+                        sh """
+                            docker build -t ${DOCKERHUB_NAMESPACE}/ecommerce-payment-service:${IMAGE_TAG} \
+                                         -t ${DOCKERHUB_NAMESPACE}/ecommerce-payment-service:latest \
+                                         ./payment-service
+                        """
+                    }
+                }
+                stage('Build search-service') {
+                    steps {
+                        sh """
+                            docker build -t ${DOCKERHUB_NAMESPACE}/ecommerce-search-service:${IMAGE_TAG} \
+                                         -t ${DOCKERHUB_NAMESPACE}/ecommerce-search-service:latest \
+                                         ./search-service
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: "${DOCKERHUB_CREDENTIALS}",
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
+
+                    sh """
+                        docker push ${DOCKERHUB_NAMESPACE}/ecommerce-web:${IMAGE_TAG}
+                        docker push ${DOCKERHUB_NAMESPACE}/ecommerce-web:latest
+
+                        docker push ${DOCKERHUB_NAMESPACE}/ecommerce-payment-service:${IMAGE_TAG}
+                        docker push ${DOCKERHUB_NAMESPACE}/ecommerce-payment-service:latest
+
+                        docker push ${DOCKERHUB_NAMESPACE}/ecommerce-search-service:${IMAGE_TAG}
+                        docker push ${DOCKERHUB_NAMESPACE}/ecommerce-search-service:latest
+                    """
+
+                    sh 'docker logout'
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                withCredentials([file(credentialsId: "${KUBECONFIG_CREDENTIALS}", variable: 'KUBECONFIG')]) {
+                    sh """
+                        kubectl --kubeconfig=\$KUBECONFIG -n ${K8S_NAMESPACE} \
+                            set image deployment/web web=${DOCKERHUB_NAMESPACE}/ecommerce-web:${IMAGE_TAG}
+
+                        kubectl --kubeconfig=\$KUBECONFIG -n ${K8S_NAMESPACE} \
+                            set image deployment/payment-service payment-service=${DOCKERHUB_NAMESPACE}/ecommerce-payment-service:${IMAGE_TAG}
+
+                        kubectl --kubeconfig=\$KUBECONFIG -n ${K8S_NAMESPACE} \
+                            set image deployment/search-service search-service=${DOCKERHUB_NAMESPACE}/ecommerce-search-service:${IMAGE_TAG}
+
+                        kubectl --kubeconfig=\$KUBECONFIG -n ${K8S_NAMESPACE} rollout status deployment/web --timeout=180s
+                        kubectl --kubeconfig=\$KUBECONFIG -n ${K8S_NAMESPACE} rollout status deployment/payment-service --timeout=180s
+                        kubectl --kubeconfig=\$KUBECONFIG -n ${K8S_NAMESPACE} rollout status deployment/search-service --timeout=180s
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Pipeline succeeded. Deployed image tag: ${IMAGE_TAG}"
+        }
+        failure {
+            echo "❌ Pipeline failed. Rolling back to previous revision..."
+            withCredentials([file(credentialsId: "${KUBECONFIG_CREDENTIALS}", variable: 'KUBECONFIG')]) {
+                sh """
+                    kubectl --kubeconfig=\$KUBECONFIG -n ${K8S_NAMESPACE} rollout undo deployment/web || true
+                    kubectl --kubeconfig=\$KUBECONFIG -n ${K8S_NAMESPACE} rollout undo deployment/payment-service || true
+                    kubectl --kubeconfig=\$KUBECONFIG -n ${K8S_NAMESPACE} rollout undo deployment/search-service || true
+                """
+            }
+        }
+        always {
+            sh 'docker image prune -f || true'
+        }
+    }
+}

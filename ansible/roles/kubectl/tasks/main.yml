@@ -1,0 +1,50 @@
+---
+- name: Check if kubectl is already installed at the desired version
+  command: kubectl version --client --output=yaml
+  register: kubectl_check
+  failed_when: false
+  changed_when: false
+
+- name: Download kubectl binary
+  get_url:
+    url: "https://dl.k8s.io/release/v{{ kubectl_version }}/bin/linux/amd64/kubectl"
+    dest: /usr/local/bin/kubectl
+    mode: "0755"
+  when: kubectl_version not in (kubectl_check.stdout | default(''))
+
+- name: Verify kubectl installation
+  command: kubectl version --client
+  register: kubectl_version_out
+  changed_when: false
+
+- name: Show kubectl version
+  debug:
+    msg: "{{ kubectl_version_out.stdout }}"
+
+# --- Optional: lightweight single-node Kubernetes (k3s) ---
+
+- name: Install k3s (single-node Kubernetes)
+  shell: curl -sfL https://get.k3s.io | sh -
+  args:
+    creates: /usr/local/bin/k3s
+  when: install_k3s | default(false)
+
+- name: Ensure k3s service is enabled and running
+  systemd:
+    name: k3s
+    enabled: yes
+    state: started
+  when: install_k3s | default(false)
+
+- name: Make k3s kubeconfig readable by the remote user
+  file:
+    path: /etc/rancher/k3s/k3s.yaml
+    mode: "0644"
+  when: install_k3s | default(false)
+
+- name: Point kubectl at the k3s kubeconfig for the remote user
+  lineinfile:
+    path: "/home/{{ ansible_user }}/.bashrc"
+    line: "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml"
+    create: yes
+  when: install_k3s | default(false)

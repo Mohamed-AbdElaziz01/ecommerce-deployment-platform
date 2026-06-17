@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------
+  # Reverse proxy - single entry point for all services
+  # ---------------------------------------------------------------
+  nginx:
+    build: ./nginx
+    container_name: ecommerce-nginx
+    ports:
+      - "8080:80"
+    depends_on:
+      - web
+      - payment-service
+      - search-service
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------
+  # Web / API service - products, auth, orders
+  # ---------------------------------------------------------------
+  web:
+    build: ./web-service
+    container_name: ecommerce-web
+    expose:
+      - "3000"
+    environment:
+      - PORT=3000
+      - MONGO_URI=mongodb://mongo:27017/ecommerce
+      - JWT_SECRET=dev-secret-change-me
+      - PAYMENT_SERVICE_URL=http://payment-service:4000
+      - SEARCH_SERVICE_URL=http://search-service:5000
+      - NODE_ENV=development
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------
+  # Payment service - mock payment processing
+  # ---------------------------------------------------------------
+  payment-service:
+    build: ./payment-service
+    container_name: ecommerce-payment
+    expose:
+      - "4000"
+    environment:
+      - PORT=4000
+      - MONGO_URI=mongodb://mongo:27017/payments
+      - PROCESSING_DELAY_MS=300
+      - NODE_ENV=development
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------
+  # Search service - Elasticsearch-backed product search
+  # ---------------------------------------------------------------
+  search-service:
+    build: ./search-service
+    container_name: ecommerce-search
+    expose:
+      - "5000"
+    environment:
+      - PORT=5000
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - MONGO_URI=mongodb://mongo:27017/ecommerce
+      - NODE_ENV=development
+    depends_on:
+      - elasticsearch
+      - mongo
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------
+  # MongoDB - shared database for products, orders, users, payments
+  # ---------------------------------------------------------------
+  mongo:
+    image: mongo:7
+    container_name: ecommerce-mongo
+    expose:
+      - "27017"
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------
+  # Elasticsearch - product search index
+  # ---------------------------------------------------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
+    container_name: ecommerce-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    expose:
+      - "9200"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
+  es-data:

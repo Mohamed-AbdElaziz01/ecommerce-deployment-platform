@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ecommerce-config
+  namespace: ecommerce
+data:
+  MONGO_URI_ECOMMERCE: "mongodb://mongo:27017/ecommerce"
+  MONGO_URI_PAYMENTS: "mongodb://mongo:27017/payments"
+  PAYMENT_SERVICE_URL: "http://payment-service:4000"
+  SEARCH_SERVICE_URL: "http://search-service:5000"
+  ELASTICSEARCH_URL: "http://elasticsearch:9200"
+  PROCESSING_DELAY_MS: "300"
+  NODE_ENV: "production"
+  WEB_PORT: "3000"
+  PAYMENT_PORT: "4000"
+  SEARCH_PORT: "5000"

@@ -1,0 +1,18 @@
+---
+# Directory on the remote server where the project will be deployed
+app_dir: /opt/ecommerce-platform
+
+# Git repository to clone (update to your own repo URL)
+repo_url: https://github.com/your-username/ecommerce-deployment-platform.git
+repo_branch: main
+
+# Docker Compose version to install (binary release)
+docker_compose_version: "2.27.0"
+
+# kubectl version to install
+kubectl_version: "1.30.0"
+
+# Whether to install a local single-node k3s cluster (lightweight Kubernetes)
+# Set to false if you only want Docker Compose deployment, or if this server
+# will use a separately-managed Kubernetes cluster (e.g. EKS).
+install_k3s: false
